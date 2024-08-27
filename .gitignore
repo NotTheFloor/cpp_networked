@@ -1,0 +1,108 @@
+# Compiled Object files
+*.o
+*.obj
+*.lo
+*.slo
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*
+
+# Debug files
+*.dSYM/
+*.stackdump
+*.core
+
+# Temporary files
+*~
+*.swp
+*.swo
+*.tmp
+*.temp
+
+# Build directories
+/build/
+/bin/
+/debug/
+/release/
+/out/
+/dist/
+/*.vs/
+*.vscode/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+/CMakeScripts/
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# IDE-specific files
+# CLion
+.idea/
+*.iml
+cmake-build-*/
+
+# Visual Studio
+*.vcxproj
+*.vcxproj.user
+*.vcxproj.filters
+*.pdb
+*.opendb
+*.ipch
+*.obj
+*.tlog
+*.log
+*.vspscc
+*.vssscc
+.vscode/
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+
+# Code::Blocks
+*.layout
+*.cbp
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+
+# Eclipse
+.project
+.cproject
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# JetBrains CLion
+/.idea/
+/*.iml
+
+# Ignore x64lin directories and all their contents
+x64lin/
+
