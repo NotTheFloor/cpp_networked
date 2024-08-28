@@ -1,4 +1,6 @@
 #pragma once
 
-int network_main();
+#include "event.h"
+
+int network_main(SharedResources &sharedResources);
 

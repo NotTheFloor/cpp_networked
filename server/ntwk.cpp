@@ -1,3 +1,4 @@
+#include <functional>
 #include <iostream>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -5,8 +6,11 @@
 #include <sys/epoll.h>
 #include <fcntl.h>
 #include <cstring>
+#include <memory>
+#include <mutex>
 
 #include "ntwk.h"
+#include "event.h"
 
 #define LISTEN_BACKLOG 5
 #define MAX_EVENTS 10
@@ -30,7 +34,8 @@ int setnonblocking(int sock)
     return result;
 }
 
-int network_main()
+// We start swapping to camelCase here... fine
+int network_main(SharedResources &sharedResources)
 {
     std::cout << "Starting network main" << std::endl;
 
@@ -74,6 +79,8 @@ int network_main()
     // Main network loop
     for(;;)
     {
+        // Timeout here to avoid busy wait
+        // Eventually may want network events too so no indef wait
         nfds = epoll_wait(epollfd, events, MAX_EVENTS, 0);
         if (nfds == -1)
         {
@@ -142,6 +149,16 @@ int network_main()
                     // Data is ready and waiting on the socket
                 } else {
                     std::cout << "Message from client: " << buffer << std::endl;
+
+                    int socketId = events[n].data.fd;
+                    std::string strBuffer(buffer);
+                    auto event = std::make_unique<MessageEvent>(socketId, strBuffer);
+
+                    {
+                        std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
+                        sharedResources.eventQueue.push(std::move(event));
+                    }
+                    sharedResources.eventCondition.notify_one();
                 }
             }
         }
