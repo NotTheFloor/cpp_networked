@@ -2,20 +2,23 @@
 #include <thread>
 #include <memory>
 #include <mutex>
+#include <atomic>
 
 #include "event.h"
 #include "ntwk.h"
 
 int main()
 {
+    bool mainRunning = true;
     SharedResources sharedResources;
+    std::atomic<bool> networkShutdownFlag(false);
 
     // Create network thread
     std::cout << "Creating network thread... ";
-    std::thread network_thread(network_main, std::ref(sharedResources));
+    std::thread network_thread(network_main, std::ref(sharedResources), std::ref(networkShutdownFlag));
     std::cout << "created" << std::endl;
 
-    while(true) {
+    while(mainRunning) {
         std::unique_ptr<BaseEvent> event;
         {
             std::unique_lock<std::mutex> lock(sharedResources.queueMutex);
@@ -25,9 +28,16 @@ int main()
         }
 
         switch(event->eventType) {
-            case EventType::EventTypeMessage:
+            case EventType::EventTypeMessage: {
                 auto *eventData = static_cast<MessageEvent*>(event.get());
                 std::cout << "Event loop data: " << eventData->message << std::endl;
+                break;
+                                              }
+            case EventType::Shutdown:
+                std::cout << "Setting nsf to true" << std::endl;
+                networkShutdownFlag = true;
+                mainRunning = false;
+                break;
         }
     }
 

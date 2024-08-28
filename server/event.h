@@ -8,7 +8,7 @@
 
 enum class EventType {
     EventTypeMessage,
-    EventTypeMessage2
+    Shutdown
 };
 
 struct BaseEvent {
@@ -31,11 +31,10 @@ struct MessageEvent : BaseEvent {
     }
 };
 
-struct MessageEvent2 : BaseEvent {
+struct ShutdownEvent : BaseEvent {
     int clientId;
-    std::string message;
 
-    MessageEvent2(int id, const std::string &message) : clientId(id), message(message) {
-        eventType = EventType::EventTypeMessage2;
+    ShutdownEvent(int id) : clientId(id) {
+        eventType = EventType::Shutdown;
     }
 };

@@ -35,7 +35,7 @@ int setnonblocking(int sock)
 }
 
 // We start swapping to camelCase here... fine
-int network_main(SharedResources &sharedResources)
+int network_main(SharedResources &sharedResources, std::atomic<bool> &shutdownFlag)
 {
     std::cout << "Starting network main" << std::endl;
 
@@ -79,6 +79,8 @@ int network_main(SharedResources &sharedResources)
     // Main network loop
     for(;;)
     {
+        if (shutdownFlag == true)
+            break;
         // Timeout here to avoid busy wait
         // Eventually may want network events too so no indef wait
         nfds = epoll_wait(epollfd, events, MAX_EVENTS, 0);
@@ -148,17 +150,27 @@ int network_main(SharedResources &sharedResources)
 
                     // Data is ready and waiting on the socket
                 } else {
-                    std::cout << "Message from client: " << buffer << std::endl;
-
                     int socketId = events[n].data.fd;
                     std::string strBuffer(buffer);
-                    auto event = std::make_unique<MessageEvent>(socketId, strBuffer);
 
-                    {
-                        std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
-                        sharedResources.eventQueue.push(std::move(event));
+                    if (strBuffer != "/SHUTIT") {
+                        auto event = std::make_unique<MessageEvent>(socketId, strBuffer);
+
+                        {
+                            std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
+                            sharedResources.eventQueue.push(std::move(event));
+                        }
+                        sharedResources.eventCondition.notify_one();
+
+                    } else {
+                        auto event = std::make_unique<ShutdownEvent>(socketId);
+
+                        {
+                            std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
+                            sharedResources.eventQueue.push(std::move(event));
+                        }
+                        sharedResources.eventCondition.notify_one();
                     }
-                    sharedResources.eventCondition.notify_one();
                 }
             }
         }
@@ -166,7 +178,7 @@ int network_main(SharedResources &sharedResources)
 
     close(list_sock);
 
-    std::cout << "Let's start things basic" << std::endl;
+    std::cout << "Let's start things basic - (network shutdown)" << std::endl;
 
     return 0;
 }
