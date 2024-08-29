@@ -136,6 +136,11 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                     sharedNetResources.eventQueue.pop();
                 }
 
+                if (event == nullptr) {
+                    std::cout << "sharedNetResources returned event is null" << std::endl;
+                    continue;
+                }
+
                 switch(event->eventType) {
                     case EventType::EventTypeMessage: {
                         auto *eventData = static_cast<MessageEvent*>(event.get());
