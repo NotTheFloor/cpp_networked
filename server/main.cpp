@@ -1,8 +1,10 @@
+#include <cstdint>
 #include <iostream>
 #include <thread>
 #include <memory>
 #include <mutex>
 #include <atomic>
+#include <sys/socket.h>
 
 #include "event.h"
 #include "ntwk.h"
@@ -11,11 +13,12 @@ int main()
 {
     bool mainRunning = true;
     SharedResources sharedResources;
+    SharedNetResources sharedNetResources;
     std::atomic<bool> networkShutdownFlag(false);
 
     // Create network thread
     std::cout << "Creating network thread... ";
-    std::thread network_thread(network_main, std::ref(sharedResources), std::ref(networkShutdownFlag));
+    std::thread network_thread(network_main, std::ref(sharedResources), std::ref(sharedNetResources), std::ref(networkShutdownFlag));
     std::cout << "created" << std::endl;
 
     while(mainRunning) {
@@ -31,8 +34,22 @@ int main()
             case EventType::EventTypeMessage: {
                 auto *eventData = static_cast<MessageEvent*>(event.get());
                 std::cout << "Event loop data: " << eventData->message << std::endl;
+
+                if (eventData->message == "/WOW") {
+                    int socketId = eventData->clientId;
+                    std::string strBuffer("BIGGER WOW");
+                    auto event = std::make_unique<MessageEvent>(socketId, strBuffer);
+
+                    {
+                        std::lock_guard<std::mutex> lock(sharedNetResources.queueMutex);
+                        sharedNetResources.eventQueue.push(std::move(event));
+                    
+                        uint64_t u = 1;
+                        write(sharedNetResources.eventfd, &u, sizeof(uint64_t));
+                    }
+                }
                 break;
-                                              }
+            }
             case EventType::Shutdown:
                 std::cout << "Setting nsf to true" << std::endl;
                 networkShutdownFlag = true;

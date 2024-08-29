@@ -4,5 +4,9 @@
 
 #include "event.h"
 
-int network_main(SharedResources &sharedResources, std::atomic<bool> &shutdownFlag);
+struct SharedNetResources : SharedResources {
+   int eventfd;
+};
+
+int network_main(SharedResources &sharedResources, SharedNetResources &sharedNetResources, std::atomic<bool> &shutdownFlag);
 

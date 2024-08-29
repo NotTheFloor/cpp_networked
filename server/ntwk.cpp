@@ -1,6 +1,7 @@
 #include <functional>
 #include <iostream>
 #include <sys/socket.h>
+#include <sys/eventfd.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <sys/epoll.h>
@@ -35,9 +36,12 @@ int setnonblocking(int sock)
 }
 
 // We start swapping to camelCase here... fine
-int network_main(SharedResources &sharedResources, std::atomic<bool> &shutdownFlag)
+int network_main(SharedResources &sharedResources, SharedNetResources &sharedNetResources, std::atomic<bool> &shutdownFlag)
 {
     std::cout << "Starting network main" << std::endl;
+
+    sharedNetResources.eventfd = eventfd(0, 0);
+    int _eventfd = sharedNetResources.eventfd;
 
     struct epoll_event ev, events[MAX_EVENTS];
     int conn_sock, nfds, epollfd;
@@ -53,7 +57,7 @@ int network_main(SharedResources &sharedResources, std::atomic<bool> &shutdownFl
     sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
 
-    if (bind(list_sock, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) == -1)
+    if (bind(list_sock, reinterpret_cast<struct sockaddr *>(&serverAddress), sizeof(serverAddress)) == -1)
     {
         std::cout << "Error binding server socket" << std::endl;
         return 1;
@@ -76,6 +80,14 @@ int network_main(SharedResources &sharedResources, std::atomic<bool> &shutdownFl
         return 1;
     }
 
+    ev.events = EPOLLIN;
+    ev.data.fd = _eventfd;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, _eventfd, &ev) == -1)
+    {
+        std::cout << "Error epoll_ctl" << std::endl;
+        return 1;
+    }
+
     // Main network loop
     for(;;)
     {
@@ -88,12 +100,6 @@ int network_main(SharedResources &sharedResources, std::atomic<bool> &shutdownFl
         {
             std::cout << "Error epoll_wait" << std::endl;
             return 1;
-        }
-
-        if (msgs_recvd > 3 && nfds == 0)
-        {
-            std::cout << "Shutting down" << std::endl;
-            break;
         }
 
         for(int n = 0; n < nfds; ++n)
@@ -117,6 +123,28 @@ int network_main(SharedResources &sharedResources, std::atomic<bool> &shutdownFl
                 {
                     std::cout << "Failed to add client to epoll" << std::endl;
                     return 1;
+                }
+
+            } else if (events[n].data.fd == _eventfd) {
+                uint64_t u;
+                read(_eventfd, &u, sizeof(uint64_t));
+
+                std::unique_ptr<BaseEvent> event;
+                {
+                    std::lock_guard lock(sharedNetResources.queueMutex);
+                    event = std::move(sharedNetResources.eventQueue.front());
+                    sharedNetResources.eventQueue.pop();
+                }
+
+                switch(event->eventType) {
+                    case EventType::EventTypeMessage: {
+                        auto *eventData = static_cast<MessageEvent*>(event.get());
+                        std::cout << "Event loop data: " << eventData->message << std::endl;
+                        break;
+                    }
+                    default:
+                        std::cout << "Default case" << std::endl;
+                        break;
                 }
 
             } else {
@@ -153,6 +181,7 @@ int network_main(SharedResources &sharedResources, std::atomic<bool> &shutdownFl
                     int socketId = events[n].data.fd;
                     std::string strBuffer(buffer);
 
+                    // We only need to define event in the branching; unless auto prevents?
                     if (strBuffer != "/SHUTIT") {
                         auto event = std::make_unique<MessageEvent>(socketId, strBuffer);
 
