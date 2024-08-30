@@ -8,7 +8,9 @@
 
 enum class EventType {
     EventTypeMessage,
-    Shutdown
+    Shutdown,
+    ConnectReq,
+    ConnectAccept
 };
 
 struct BaseEvent {
@@ -36,5 +38,21 @@ struct ShutdownEvent : BaseEvent {
 
     ShutdownEvent(int id) : clientId(id) {
         eventType = EventType::Shutdown;
+    }
+};
+
+struct ConnectReqEvent : BaseEvent {
+    uint32_t clientAddr;
+
+    ConnectReqEvent(uint32_t id) : clientAddr(id) {
+        eventType = EventType::ConnectReq;
+    }
+};
+
+struct ConnectAcceptEvent : BaseEvent {
+    int clientId;
+
+    ConnectAcceptEvent(int id) : clientId(id) {
+        eventType = EventType::ConnectAccept;
     }
 };

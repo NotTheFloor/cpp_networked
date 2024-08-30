@@ -9,6 +9,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 
 #include "ntwk.h"
 #include "event.h"
@@ -40,12 +41,13 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
 {
     std::cout << "Starting network main" << std::endl;
 
+    // Note: we'll use contain which is C++20
+    std::unordered_map<in_addr_t, int> pendingUserMap, connUserMap;
     sharedNetResources.eventfd = eventfd(0, 0);
     int _eventfd = sharedNetResources.eventfd;
 
     struct epoll_event ev, events[MAX_EVENTS];
     int conn_sock, nfds, epollfd;
-    int msgs_recvd = 0;
 
     int list_sock = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 
@@ -93,8 +95,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
     {
         if (shutdownFlag == true)
             break;
-        // Timeout here to avoid busy wait
-        // Eventually may want network events too so no indef wait
+
         nfds = epoll_wait(epollfd, events, MAX_EVENTS, 0);
         if (nfds == -1)
         {
@@ -125,6 +126,16 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                     return 1;
                 }
 
+                
+                auto event = std::make_unique<ConnectReqEvent>(client_addr.sin_addr.s_addr);
+
+                {
+                    std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
+                    sharedResources.eventQueue.push(std::move(event));
+                }
+                sharedResources.eventCondition.notify_one();
+
+                // Pending event loop
             } else if (events[n].data.fd == _eventfd) {
                 uint64_t u;
                 read(_eventfd, &u, sizeof(uint64_t));
@@ -136,12 +147,19 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                     sharedNetResources.eventQueue.pop();
                 }
 
+                // really should not happen - possible if eventfd remains active after
+                // events already been handled and list is empty
                 if (event == nullptr) {
                     std::cout << "sharedNetResources returned event is null" << std::endl;
                     continue;
                 }
 
                 switch(event->eventType) {
+                    case EventType::ConnectAccept: {
+                        auto *eventData = static_cast<ConnectAcceptEvent*>(event.get());
+                        std::cout << "Connection request accepted" << std::endl;
+                        break;
+                    }
                     case EventType::EventTypeMessage: {
                         auto *eventData = static_cast<MessageEvent*>(event.get());
                         std::cout << "Event loop data: " << eventData->message << std::endl;
@@ -160,16 +178,13 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                 // Client socket is closed
                 if (amt_recvd == 0) 
                 {
-                    msgs_recvd++;
-                    std::cout << "Clients finished count: " << msgs_recvd << std::endl;
-
                     int s2c = events[n].data.fd;
 
                     std::cout << "Client socket closing" << std::endl;
 
                     if (epoll_ctl(epollfd, EPOLL_CTL_DEL, s2c, NULL) == -1)
                     {
-                        std::cout << "Failed to add client to epoll" << std::endl;
+                        std::cout << "Failed to remove client from epoll" << std::endl;
                         return 1;
                     }
 

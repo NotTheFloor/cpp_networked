@@ -50,6 +50,22 @@ int main()
                 }
                 break;
             }
+            case EventType::ConnectReq: {
+                auto *eventData = static_cast<ConnectReqEvent*>(event.get());
+                std::cout << "Connection request recv'd" << std::endl;
+
+                int socketId = eventData->clientAddr;
+                auto event = std::make_unique<ConnectAcceptEvent>(1);
+
+                {
+                    std::lock_guard<std::mutex> lock(sharedNetResources.queueMutex);
+                    sharedNetResources.eventQueue.push(std::move(event));
+
+                    uint64_t u = 1;
+                    write(sharedNetResources.eventfd, &u, sizeof(uint64_t));
+                }
+                break;
+            }
             case EventType::Shutdown:
                 std::cout << "Setting nsf to true" << std::endl;
                 networkShutdownFlag = true;
