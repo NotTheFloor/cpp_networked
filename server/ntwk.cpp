@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <functional>
 #include <iostream>
 #include <sys/socket.h>
@@ -17,6 +18,14 @@
 #define LISTEN_BACKLOG 5
 #define MAX_EVENTS 10
 #define MAX_CONN_ATTEMPTS 3
+
+void pushEvent(SharedResources &sharedResources, std::unique_ptr<BaseEvent>(event))
+{
+    std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
+    sharedResources.eventQueue.push(std::move(event));
+
+    sharedResources.eventCondition.notify_one();
+}
 
 // Provided by selbie on stackoverflow
 int setnonblocking(int sock)
@@ -97,6 +106,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
         if (shutdownFlag == true)
             break;
 
+        // Blocking function - wakes for network and eventfd fd's
         nfds = epoll_wait(epollfd, events, MAX_EVENTS, 0);
         if (nfds == -1)
         {
@@ -130,11 +140,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                 // Connection req should really be sent after the has been established
                 auto event = std::make_unique<ConnectReqEvent>(client_addr.sin_addr.s_addr);
 
-                {
-                    std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
-                    sharedResources.eventQueue.push(std::move(event));
-                }
-                sharedResources.eventCondition.notify_one();
+                pushEvent(std::ref(sharedResources), std::move(event));
 
                 if (pendingUserMap.contains(client_addr.sin_addr.s_addr)) {
                     pendingUserMap[client_addr.sin_addr.s_addr] += 1;
@@ -228,20 +234,13 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                     if (strBuffer != "/SHUTIT") {
                         auto event = std::make_unique<MessageEvent>(socketId, strBuffer);
 
-                        {
-                            std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
-                            sharedResources.eventQueue.push(std::move(event));
-                        }
-                        sharedResources.eventCondition.notify_one();
+
+                        pushEvent(std::ref(sharedResources), std::move(event));
 
                     } else {
                         auto event = std::make_unique<ShutdownEvent>(socketId);
 
-                        {
-                            std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
-                            sharedResources.eventQueue.push(std::move(event));
-                        }
-                        sharedResources.eventCondition.notify_one();
+                        pushEvent(std::ref(sharedResources), std::move(event));
                     }
                 }
             }
