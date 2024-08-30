@@ -54,8 +54,8 @@ int main()
                 auto *eventData = static_cast<ConnectReqEvent*>(event.get());
                 std::cout << "Connection request recv'd" << std::endl;
 
-                int socketId = eventData->clientAddr;
-                auto event = std::make_unique<ConnectAcceptEvent>(1);
+                uint32_t clientAddr = eventData->clientAddr;
+                auto event = std::make_unique<ConnectAcceptEvent>(1, clientAddr);
 
                 {
                     std::lock_guard<std::mutex> lock(sharedNetResources.queueMutex);

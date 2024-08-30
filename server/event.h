@@ -51,8 +51,9 @@ struct ConnectReqEvent : BaseEvent {
 
 struct ConnectAcceptEvent : BaseEvent {
     int clientId;
+    uint32_t clientAddr;
 
-    ConnectAcceptEvent(int id) : clientId(id) {
+    ConnectAcceptEvent(int id, uint32_t cAddr) : clientId(id), clientAddr(cAddr) {
         eventType = EventType::ConnectAccept;
     }
 };

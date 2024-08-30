@@ -16,6 +16,7 @@
 
 #define LISTEN_BACKLOG 5
 #define MAX_EVENTS 10
+#define MAX_CONN_ATTEMPTS 3
 
 // Provided by selbie on stackoverflow
 int setnonblocking(int sock)
@@ -126,7 +127,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                     return 1;
                 }
 
-                
+                // Connection req should really be sent after the has been established
                 auto event = std::make_unique<ConnectReqEvent>(client_addr.sin_addr.s_addr);
 
                 {
@@ -134,6 +135,17 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                     sharedResources.eventQueue.push(std::move(event));
                 }
                 sharedResources.eventCondition.notify_one();
+
+                if (pendingUserMap.contains(client_addr.sin_addr.s_addr)) {
+                    pendingUserMap[client_addr.sin_addr.s_addr] += 1;
+                    if (pendingUserMap[client_addr.sin_addr.s_addr] > MAX_CONN_ATTEMPTS) {
+                        std::cout << "User reached max connections attempts" << std::endl;
+                        // Obviously needs to be handled
+                    }
+
+                } else {
+                    pendingUserMap[client_addr.sin_addr.s_addr] = 1;
+                }
 
                 // Pending event loop
             } else if (events[n].data.fd == _eventfd) {
@@ -157,7 +169,18 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                 switch(event->eventType) {
                     case EventType::ConnectAccept: {
                         auto *eventData = static_cast<ConnectAcceptEvent*>(event.get());
-                        std::cout << "Connection request accepted" << std::endl;
+
+                        // Also need to test if user is already connected
+                        if (!pendingUserMap.contains(client_addr.sin_addr.s_addr)) {
+                            std::cout << "Accepted connection for non-pending user" << std::endl;
+                            // Needs to be hadnled
+                            break;
+                        }
+
+                        pendingUserMap.erase(eventData->clientAddr);
+                        connUserMap[eventData->clientAddr] = eventData->clientId;
+                        
+                        std::cout << "Connection request accepted with id: " << eventData->clientId << std::endl;
                         break;
                     }
                     case EventType::EventTypeMessage: {
