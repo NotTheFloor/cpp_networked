@@ -9,6 +9,15 @@
 #include "event.h"
 #include "ntwk.h"
 
+void pushNetworkEvent(SharedNetResources &sharedNetResources, std::unique_ptr<BaseEvent>(event))
+{
+    std::lock_guard<std::mutex> lock(sharedNetResources.queueMutex);
+    sharedNetResources.eventQueue.push(std::move(event));
+
+    uint64_t u = 1;
+    write(sharedNetResources.eventfd, &u, sizeof(uint64_t));
+}
+
 int main()
 {
     bool mainRunning = true;
@@ -40,13 +49,7 @@ int main()
                     std::string strBuffer("BIGGER WOW");
                     auto event = std::make_unique<MessageEvent>(socketId, strBuffer);
 
-                    {
-                        std::lock_guard<std::mutex> lock(sharedNetResources.queueMutex);
-                        sharedNetResources.eventQueue.push(std::move(event));
-                    
-                        uint64_t u = 1;
-                        write(sharedNetResources.eventfd, &u, sizeof(uint64_t));
-                    }
+                    pushNetworkEvent(std::ref(sharedNetResources), std::move(event));
                 }
                 break;
             }
@@ -57,13 +60,7 @@ int main()
                 uint32_t clientAddr = eventData->clientAddr;
                 auto event = std::make_unique<ConnectAcceptEvent>(1, clientAddr);
 
-                {
-                    std::lock_guard<std::mutex> lock(sharedNetResources.queueMutex);
-                    sharedNetResources.eventQueue.push(std::move(event));
-
-                    uint64_t u = 1;
-                    write(sharedNetResources.eventfd, &u, sizeof(uint64_t));
-                }
+                pushNetworkEvent(std::ref(sharedNetResources), std::move(event));
                 break;
             }
             case EventType::Shutdown:
