@@ -6,6 +6,7 @@
 #include <cstring>
 #include <netinet/in.h>
 #include <memory>
+#include <functional>
 
 #include "event.h"
 
@@ -69,6 +70,6 @@ class ConnReqPacket : public BasePacket {
 
 std::unique_ptr<BasePacket> packetFactory(uint16_t type);
 void sendPacket(int sock, uint16_t type, const BasePacket & basePacket);
-std:unique_ptr<BasePacket> recvPacket(int sock, std::function<std::unique_ptr<BasePacket>(uint16_t)> packetFactory);
+std::unique_ptr<BasePacket> recvPacket(int sock, std::function<std::unique_ptr<BasePacket>(uint16_t)> packetFactory);
 int network_main(SharedResources &sharedResources, SharedNetResources &sharedNetResources, std::atomic<bool> &shutdownFlag);
 
