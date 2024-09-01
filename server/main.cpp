@@ -6,6 +6,7 @@
 #include <atomic>
 #include <sys/socket.h>
 
+#include "logger.h"
 #include "event.h"
 #include "ntwk.h"
 
@@ -27,6 +28,7 @@ int main()
 
     // Create network thread
     std::cout << "Creating network thread... ";
+    Logger::getInstance().log(LogLevel::Info, "Creating network thread ...");
     std::thread network_thread(network_main, std::ref(sharedResources), std::ref(sharedNetResources), std::ref(networkShutdownFlag));
     std::cout << "created" << std::endl;
 

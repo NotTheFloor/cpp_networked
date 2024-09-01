@@ -24,7 +24,7 @@ std::unique_ptr<BasePacket> packetFactory(uint16_t type)
 {
     switch (type) {
         case 1: // Need to define message types somewhere still
-            return std::make_unqiue<ConnReqPacket>();
+            return std::make_unique<ConnReqPacket>();
         case 2:
             return std::make_unique<MessagePacket>();
         default:
@@ -52,7 +52,7 @@ std::unique_ptr<BasePacket> recvPacket(int sock, std::function<std::unique_ptr<B
     uint16_t length = ntohs(header.length);
 
     std::vector<uint8_t> payload(length);
-    recv(sock, paylaod.data(), length, 0);
+    recv(sock, payload.data(), length, 0);
 
     std::unique_ptr<BasePacket> basePacket = packetFactory(type);
     if (basePacket) {

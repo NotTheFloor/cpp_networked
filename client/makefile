@@ -1,7 +1,7 @@
 # Target name, include dir, and object dir
 TARGET = main
 INCDIR1 = .
-INCDIR2 = ../../Include
+INCDIR2 = ../common
 OBJDIR = x64lin
 
 # g++ code generation options
