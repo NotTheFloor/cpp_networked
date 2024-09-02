@@ -5,6 +5,9 @@
 #include <cstring>
 #include <string>
 
+#include "logger.h"
+#include "ntwk.h"
+
 int main()
 {
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -14,15 +17,28 @@ int main()
     serverAddress.sin_port = htons(8080);
     serverAddress.sin_addr.s_addr = INADDR_ANY;
 
-    std::string s;
+    /*std::string s;
 
     std::cout << "Send this: ";
-    std::cin >> s;
+    std::cin >> s;*/
 
-    connect(clientSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress));
+    Logger::getInstance().log(LogLevel::Info, "Attempting to connect... ");
 
-    const char *message = s.c_str();
-    send(clientSocket, message, std::strlen(message), 0);
+    if (connect(clientSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) == -1)
+    {
+        Logger::getInstance().log(LogLevel::Error, "Failed to connect to server");
+        return 1;
+    }
+
+    Logger::getInstance().log(LogLevel::Info, "Connected");
+
+    ConnReqPacket packet;
+    packet.name = "Charles Packet";
+    packet.placeHolder = 10;
+
+    Logger::getInstance().log(LogLevel::Info, "Sending packet");
+    sendPacket(clientSocket, 1, packet);
+    Logger::getInstance().log(LogLevel::Info, "Sent");
 
     close(clientSocket);
 }

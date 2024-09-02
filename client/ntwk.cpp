@@ -12,10 +12,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
-#include <string>
-#include <errno.h>
 
-#include "logger.h"
 #include "ntwk.h"
 #include "event.h"
 
@@ -49,32 +46,13 @@ void sendPacket(int sock, uint16_t type, const BasePacket &basePacket)
 std::unique_ptr<BasePacket> recvPacket(int sock, std::function<std::unique_ptr<BasePacket> (uint16_t)> packetFactory)
 {
     TcpPcktHeader header;
-
-    ssize_t bytesReceived = recv(sock, &header, sizeof(header), 0);
-
-    if (bytesReceived == 0)
-    {
-        Logger::getInstance().log(LogLevel::Warning, "Client disconnected");
-        return nullptr;
-    } else if (bytesReceived < 0) {
-        Logger::getInstance().log(LogLevel::Error, std::string("Error receiving data: ") + strerror(errno));
-        return nullptr;
-    }
+    recv(sock, &header, sizeof(header), 0);
 
     uint16_t type = ntohs(header.type);
     uint16_t length = ntohs(header.length);
 
     std::vector<uint8_t> payload(length);
-    bytesReceived = recv(sock, payload.data(), length, 0);
-
-    if (bytesReceived == 0)
-    {
-        Logger::getInstance().log(LogLevel::Warning, "Client disconnected");
-        return nullptr;
-    } else if (bytesReceived < 0) {
-        Logger::getInstance().log(LogLevel::Error, std::string("Error receiving data: ") + strerror(errno));
-        return nullptr;
-    }
+    recv(sock, payload.data(), length, 0);
 
     std::unique_ptr<BasePacket> basePacket = packetFactory(type);
     if (basePacket) {
@@ -193,7 +171,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                 std::cout << "Client connected from: " << client_addr.sin_addr.s_addr << std::endl;
 
                 setnonblocking(conn_sock);
-                ev.events = EPOLLIN | EPOLLHUP | EPOLLRDHUP;
+                ev.events = EPOLLIN;
                 ev.data.fd = conn_sock;
 
                 if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1)
@@ -265,7 +243,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                 }
 
             } else {
-                /*// Client data
+                // Client data
                 char buffer[1024] = {0};
                 int amt_recvd = recv(events[n].data.fd, buffer, sizeof(buffer), 0);
 
@@ -307,26 +285,6 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
 
                         pushEvent(std::ref(sharedResources), std::move(event));
                     }
-                }
-                */
-                std::unique_ptr<BasePacket> packetRecvd = recvPacket(events[n].data.fd, packetFactory);
-
-                if (packetRecvd == nullptr) 
-                {
-                    int s2c = events[n].data.fd;
-
-                    std::cout << "Client socket closing" << std::endl;
-
-                    if (epoll_ctl(epollfd, EPOLL_CTL_DEL, s2c, NULL) == -1)
-                    {
-                        std::cout << "Failed to remove client from epoll" << std::endl;
-                        return 1;
-                    }
-
-                    close(s2c);
-                } else if(auto *packet = dynamic_cast<ConnReqPacket*>(packetRecvd.get()))
-                {
-                    std::cout << "Alright " << packet->name << std::endl;
                 }
             }
         }
