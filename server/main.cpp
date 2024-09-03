@@ -57,7 +57,7 @@ int main()
             }
             case EventType::ConnectReq: {
                 auto *eventData = static_cast<ConnectReqEvent*>(event.get());
-                std::cout << "Connection request recv'd" << std::endl;
+                Logger::getInstance().log(LogLevel::Info, "Connection request from: " + eventData->name);
 
                 uint32_t clientAddr = eventData->clientAddr;
                 auto event = std::make_unique<ConnectAcceptEvent>(1, clientAddr);
@@ -69,6 +69,9 @@ int main()
                 std::cout << "Setting nsf to true" << std::endl;
                 networkShutdownFlag = true;
                 mainRunning = false;
+                break;
+            default:
+                Logger::getInstance().log(LogLevel::Warning, "Reached default switch statment in server main");
                 break;
         }
     }

@@ -43,8 +43,9 @@ struct ShutdownEvent : BaseEvent {
 
 struct ConnectReqEvent : BaseEvent {
     uint32_t clientAddr;
+    std::string name;
 
-    ConnectReqEvent(uint32_t id) : clientAddr(id) {
+    ConnectReqEvent(uint32_t id, std::string name) : clientAddr(id), name(name) {
         eventType = EventType::ConnectReq;
     }
 };
