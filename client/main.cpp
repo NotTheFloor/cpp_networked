@@ -40,5 +40,8 @@ int main()
     sendPacket(clientSocket, 1, packet);
     Logger::getInstance().log(LogLevel::Info, "Sent");
 
+    std::string buffer;
+    std::cin >> buffer;
+
     close(clientSocket);
 }

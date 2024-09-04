@@ -70,6 +70,22 @@ int main()
                 networkShutdownFlag = true;
                 mainRunning = false;
                 break;
+            case EventType::ClientDisconnect: {
+                auto *eventData = static_cast<ClientDisconnectEvent*>(event.get());
+                std::string discType;
+
+                if (eventData->disconnectType == DisconnectType::Graceful)
+                    discType = "graceful";
+                else if (eventData->disconnectType == DisconnectType::Ungraceful)
+                    discType = "ungraceful";
+                else if (eventData->disconnectType == DisconnectType::Forced)
+                    discType = "forced";
+                else if (eventData->disconnectType == DisconnectType::Timeout)
+                    discType = "timeout";
+                        
+                Logger::getInstance().log(LogLevel::Debug, "Client " + std::to_string(eventData->clientId) + " disconnected: " + discType);
+                break;
+            }
             default:
                 Logger::getInstance().log(LogLevel::Warning, "Reached default switch statment in server main");
                 break;

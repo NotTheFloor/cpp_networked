@@ -10,7 +10,15 @@ enum class EventType {
     EventTypeMessage,
     Shutdown,
     ConnectReq,
-    ConnectAccept
+    ConnectAccept,
+    ClientDisconnect
+};
+
+enum class DisconnectType {
+    Graceful,
+    Timeout,
+    Ungraceful,
+    Forced
 };
 
 struct BaseEvent {
@@ -56,5 +64,14 @@ struct ConnectAcceptEvent : BaseEvent {
 
     ConnectAcceptEvent(int id, uint32_t cAddr) : clientId(id), clientAddr(cAddr) {
         eventType = EventType::ConnectAccept;
+    }
+};
+
+struct ClientDisconnectEvent : BaseEvent {
+    int clientId;
+    DisconnectType disconnectType;
+
+    ClientDisconnectEvent(int id, DisconnectType dt) : clientId(id), disconnectType(dt) {
+        eventType = EventType::ClientDisconnect;
     }
 };

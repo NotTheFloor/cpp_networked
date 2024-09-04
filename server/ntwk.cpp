@@ -144,12 +144,6 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                 }
 
 
-                if (pendingUserMap.contains(client_addr.sin_addr.s_addr)) {
-                    pendingUserMap[client_addr.sin_addr.s_addr] += 1;
-                    Logger::getInstance().log(LogLevel::Warning, "Client attempted while still pending");
-                } else {
-                    pendingUserMap[client_addr.sin_addr.s_addr] = 1;
-                }
 
                 // Pending event loop
             } else if (events[n].data.fd == _eventfd) {
@@ -212,11 +206,26 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                     }
 
                     close(s2c);
+
+                    if (connUserMap.contains(s2c)) {
+                        auto event = std::make_unique<ClientDisconnectEvent>(connUserMap[s2c], DisconnectType::Ungraceful);
+
+                        pushEvent(std::ref(sharedResources), std::move(event));
+                    } else {
+                        Logger::getInstance().log(LogLevel::Warning, "Client disconnected before being accepted");
+                    }
                 } else if(auto *packet = dynamic_cast<ConnReqPacket*>(packetRecvd.get()))
                 {
                     auto event = std::make_unique<ConnectReqEvent>(client_addr.sin_addr.s_addr, packet->name);
 
                     pushEvent(std::ref(sharedResources), std::move(event));
+
+                    if (pendingUserMap.contains(client_addr.sin_addr.s_addr)) {
+                        pendingUserMap[client_addr.sin_addr.s_addr] += 1;
+                        Logger::getInstance().log(LogLevel::Warning, "Client attempted while still pending");
+                    } else {
+                        pendingUserMap[client_addr.sin_addr.s_addr] = 1;
+                    }
                 }
             }
         }
