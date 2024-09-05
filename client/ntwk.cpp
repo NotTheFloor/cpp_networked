@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <sys/eventfd.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <sys/epoll.h>
 #include <fcntl.h>
@@ -12,7 +13,10 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <string>
+#include <errno.h>
 
+#include "logger.h"
 #include "ntwk.h"
 #include "event.h"
 
@@ -20,47 +24,6 @@
 #define MAX_EVENTS 10
 #define MAX_CONN_ATTEMPTS 3
 
-std::unique_ptr<BasePacket> packetFactory(uint16_t type)
-{
-    switch (type) {
-        case 1: // Need to define message types somewhere still
-            return std::make_unique<ConnReqPacket>();
-        case 2:
-            return std::make_unique<MessagePacket>();
-        default:
-            return nullptr;
-    }
-}
-
-void sendPacket(int sock, uint16_t type, const BasePacket &basePacket)
-{
-    std::vector<uint8_t> payload = basePacket.serialize();
-    uint16_t payload_length = static_cast<uint16_t>(payload.size());
-
-    TcpPcktHeader header = { htons(type), htons(payload_length) };
-
-    send(sock, &header, sizeof(header), 0);
-    send(sock, payload.data(), payload_length, 0);
-}
-
-std::unique_ptr<BasePacket> recvPacket(int sock, std::function<std::unique_ptr<BasePacket> (uint16_t)> packetFactory)
-{
-    TcpPcktHeader header;
-    recv(sock, &header, sizeof(header), 0);
-
-    uint16_t type = ntohs(header.type);
-    uint16_t length = ntohs(header.length);
-
-    std::vector<uint8_t> payload(length);
-    recv(sock, payload.data(), length, 0);
-
-    std::unique_ptr<BasePacket> basePacket = packetFactory(type);
-    if (basePacket) {
-        basePacket->deserialize(payload);
-    }
-
-    return basePacket;
-}
 
 void pushEvent(SharedResources &sharedResources, std::unique_ptr<BaseEvent>(event))
 {
@@ -92,7 +55,7 @@ int setnonblocking(int sock)
 // We start swapping to camelCase here... fine
 int network_main(SharedResources &sharedResources, SharedNetResources &sharedNetResources, std::atomic<bool> &shutdownFlag)
 {
-    std::cout << "Starting network main" << std::endl;
+    Logger::getInstance().log(LogLevel::Debug, "Starting network thread");
 
     // Note: we'll use contain which is C++20
     std::unordered_map<in_addr_t, int> pendingUserMap, connUserMap;
@@ -114,7 +77,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
 
     if (bind(list_sock, reinterpret_cast<struct sockaddr *>(&serverAddress), sizeof(serverAddress)) == -1)
     {
-        std::cout << "Error binding server socket" << std::endl;
+        Logger::getInstance().log(LogLevel::Error, "Error binding server socket");
         return 1;
     }
 
@@ -123,7 +86,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
     epollfd = epoll_create1(0); // Essentially same as create
     if (epollfd == -1)
     {
-        std::cout << "Error creating epoll file descriptor" << std::endl;
+        Logger::getInstance().log(LogLevel::Error, "Error creating epoll file descriptor");
         return 1;
     }
 
@@ -131,7 +94,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
     ev.data.fd = list_sock;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, list_sock, &ev) == -1)
     {
-        std::cout << "Error epoll_ctl" << std::endl;
+        Logger::getInstance().log(LogLevel::Error, "Error epoll_ctl");
         return 1;
     }
 
@@ -139,7 +102,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
     ev.data.fd = _eventfd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, _eventfd, &ev) == -1)
     {
-        std::cout << "Error epoll_ctl" << std::endl;
+        Logger::getInstance().log(LogLevel::Error, "Error epoll_ctl");
         return 1;
     }
 
@@ -153,7 +116,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
         nfds = epoll_wait(epollfd, events, MAX_EVENTS, 0);
         if (nfds == -1)
         {
-            std::cout << "Error epoll_wait" << std::endl;
+            Logger::getInstance().log(LogLevel::Error, "Error epoll_wait");
             return 1;
         }
 
@@ -164,37 +127,23 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
             {
                 conn_sock = accept(list_sock, (struct sockaddr*) &client_addr, &client_addr_len);
                 if (conn_sock == -1) {
-                    std::cout << "Error accepting client" << std::endl;
+                    Logger::getInstance().log(LogLevel::Error, "Error accepting client");
                     return 1;
                 }
 
-                std::cout << "Client connected from: " << client_addr.sin_addr.s_addr << std::endl;
+                Logger::getInstance().log(LogLevel::Info, std::string("Client connected from: ") + inet_ntoa(client_addr.sin_addr));
 
                 setnonblocking(conn_sock);
-                ev.events = EPOLLIN;
+                ev.events = EPOLLIN | EPOLLHUP | EPOLLRDHUP;
                 ev.data.fd = conn_sock;
 
                 if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1)
                 {
-                    std::cout << "Failed to add client to epoll" << std::endl;
+                    Logger::getInstance().log(LogLevel::Error, "Failed to add client to epoll");
                     return 1;
                 }
 
-                // Connection req should really be sent after the has been established
-                auto event = std::make_unique<ConnectReqEvent>(client_addr.sin_addr.s_addr);
 
-                pushEvent(std::ref(sharedResources), std::move(event));
-
-                if (pendingUserMap.contains(client_addr.sin_addr.s_addr)) {
-                    pendingUserMap[client_addr.sin_addr.s_addr] += 1;
-                    if (pendingUserMap[client_addr.sin_addr.s_addr] > MAX_CONN_ATTEMPTS) {
-                        std::cout << "User reached max connections attempts" << std::endl;
-                        // Obviously needs to be handled
-                    }
-
-                } else {
-                    pendingUserMap[client_addr.sin_addr.s_addr] = 1;
-                }
 
                 // Pending event loop
             } else if (events[n].data.fd == _eventfd) {
@@ -211,7 +160,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                 // really should not happen - possible if eventfd remains active after
                 // events already been handled and list is empty
                 if (event == nullptr) {
-                    std::cout << "sharedNetResources returned event is null" << std::endl;
+                    Logger::getInstance().log(LogLevel::Warning, "sharedNetResources returned event is null");
                     continue;
                 }
 
@@ -221,7 +170,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
 
                         // Also need to test if user is already connected
                         if (!pendingUserMap.contains(client_addr.sin_addr.s_addr)) {
-                            std::cout << "Accepted connection for non-pending user" << std::endl;
+                            Logger::getInstance().log(LogLevel::Warning, "Accepted connection for non-pending user");
                             // Needs to be hadnled
                             break;
                         }
@@ -229,61 +178,69 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                         pendingUserMap.erase(eventData->clientAddr);
                         connUserMap[eventData->clientAddr] = eventData->clientId;
                         
-                        std::cout << "Connection request accepted with id: " << eventData->clientId << std::endl;
+                        Logger::getInstance().log(LogLevel::Debug, std::string("Connection request accepted with id: ") + std::to_string(eventData->clientId));
                         break;
                     }
                     case EventType::EventTypeMessage: {
                         auto *eventData = static_cast<MessageEvent*>(event.get());
-                        std::cout << "Event loop data: " << eventData->message << std::endl;
                         break;
                     }
                     default:
-                        std::cout << "Default case" << std::endl;
+                        Logger::getInstance().log(LogLevel::Error, "Default case");
                         break;
                 }
 
             } else {
-                // Client data
-                char buffer[1024] = {0};
-                int amt_recvd = recv(events[n].data.fd, buffer, sizeof(buffer), 0);
+                std::unique_ptr<BasePacket> packetRecvd = recvPacket(events[n].data.fd, packetFactory);
 
-                // Client socket is closed
-                if (amt_recvd == 0) 
+                if (packetRecvd == nullptr) 
                 {
                     int s2c = events[n].data.fd;
 
-                    std::cout << "Client socket closing" << std::endl;
+                    Logger::getInstance().log(LogLevel::Info, "Client socket closing");
 
                     if (epoll_ctl(epollfd, EPOLL_CTL_DEL, s2c, NULL) == -1)
                     {
-                        std::cout << "Failed to remove client from epoll" << std::endl;
+                        Logger::getInstance().log(LogLevel::Error, "Failed to remove client from epoll");
                         return 1;
                     }
 
                     close(s2c);
 
-                    // An error has occured on the socket
-                } else if (amt_recvd == -1) {
-                    std::cout << "Error recieving from client" << std::endl;
-
-                    return 1;
-
-                    // Data is ready and waiting on the socket
-                } else {
-                    int socketId = events[n].data.fd;
-                    std::string strBuffer(buffer);
-
-                    // We only need to define event in the branching; unless auto prevents?
-                    if (strBuffer != "/SHUTIT") {
-                        auto event = std::make_unique<MessageEvent>(socketId, strBuffer);
-
+                    if (connUserMap.contains(s2c)) {
+                        auto event = std::make_unique<ClientDisconnectEvent>(connUserMap[s2c], DisconnectType::Ungraceful);
 
                         pushEvent(std::ref(sharedResources), std::move(event));
-
                     } else {
-                        auto event = std::make_unique<ShutdownEvent>(socketId);
+                        Logger::getInstance().log(LogLevel::Warning, "Client disconnected before being accepted");
+                    }
+                } else {
+                    if(auto *packet = dynamic_cast<ConnReqPacket*>(packetRecvd.get()))
+                    {
+                        auto event = std::make_unique<ConnectReqEvent>(client_addr.sin_addr.s_addr, packet->name);
 
                         pushEvent(std::ref(sharedResources), std::move(event));
+
+                        if (pendingUserMap.contains(client_addr.sin_addr.s_addr)) {
+                            pendingUserMap[client_addr.sin_addr.s_addr] += 1;
+                            Logger::getInstance().log(LogLevel::Warning, "Client attempted while still pending");
+                        } else {
+                            pendingUserMap[client_addr.sin_addr.s_addr] = 1;
+                        }
+                    } else if(auto *packet = dynamic_cast<DisconnectClientPacket*>(packetRecvd.get())) {
+                        if (connUserMap.contains(events[n].data.fd)) {
+                            close(events[n].data.fd);
+
+                            auto event = std::make_unique<ClientDisconnectEvent>(connUserMap[events[n].data.fd], DisconnectType::Graceful);
+                            // Need to check and handle pending vs connected clients
+
+                            pushEvent(std::ref(sharedResources), std::move(event));
+                        } else {
+                            Logger::getInstance().log(LogLevel::Warning, "Disconnect packet received from not connected client");
+                        }
+                    } else {
+                        Logger::getInstance().log(LogLevel::Warning, "Unknown packet type received");
+                        // Should probably push packet type here
                     }
                 }
             }
@@ -292,7 +249,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
 
     close(list_sock);
 
-    std::cout << "Let's start things basic - (network shutdown)" << std::endl;
+    Logger::getInstance().log(LogLevel::Debug, "Shutting down network loop");
 
     return 0;
 }

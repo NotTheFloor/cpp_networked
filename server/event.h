@@ -50,19 +50,21 @@ struct ShutdownEvent : BaseEvent {
 };
 
 struct ConnectReqEvent : BaseEvent {
-    uint32_t clientAddr;
+    uint32_t uniqueId;
     std::string name;
+    std::string ipAddr;
+    std::string port;
 
-    ConnectReqEvent(uint32_t id, std::string name) : clientAddr(id), name(name) {
+    ConnectReqEvent(uint32_t id, std::string name, std::string ip, std::string port) : uniqueId(id), name(name), ipAddr(ip), port(port) {
         eventType = EventType::ConnectReq;
     }
 };
 
 struct ConnectAcceptEvent : BaseEvent {
     int clientId;
-    uint32_t clientAddr;
+    uint32_t uniqueId;
 
-    ConnectAcceptEvent(int id, uint32_t cAddr) : clientId(id), clientAddr(cAddr) {
+    ConnectAcceptEvent(int id, uint32_t uid) : clientId(id), uniqueId(id) {
         eventType = EventType::ConnectAccept;
     }
 };
@@ -72,6 +74,6 @@ struct ClientDisconnectEvent : BaseEvent {
     DisconnectType disconnectType;
 
     ClientDisconnectEvent(int id, DisconnectType dt) : clientId(id), disconnectType(dt) {
-        eventType = EventType::ClientDisconnect;
+        eventType = EventType::Shutdown;
     }
 };

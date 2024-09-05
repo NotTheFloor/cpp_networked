@@ -4,15 +4,10 @@
 std::unique_ptr<BasePacket> packetFactory(uint16_t type)
 {
     switch (type) {
-        case CONN_REQ_PACKET_ID: // Need to define message types somewhere still
-            Logger::getInstance().log(LogLevel::Debug, "CONN_REQ");
+        case 1: // Need to define message types somewhere still
             return std::make_unique<ConnReqPacket>();
-        case MESSAGE_PACKET_ID :
-            Logger::getInstance().log(LogLevel::Debug, "MESSAGE");
+        case 2:
             return std::make_unique<MessagePacket>();
-        case DISC_CLI_PACKET_ID:
-            Logger::getInstance().log(LogLevel::Debug, "DISC_CLI");
-            return std::make_unique<DisconnectClientPacket>();
         default:
             return nullptr;
     }

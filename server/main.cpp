@@ -27,10 +27,8 @@ int main()
     std::atomic<bool> networkShutdownFlag(false);
 
     // Create network thread
-    std::cout << "Creating network thread... ";
     Logger::getInstance().log(LogLevel::Info, "Creating network thread ...");
     std::thread network_thread(network_main, std::ref(sharedResources), std::ref(sharedNetResources), std::ref(networkShutdownFlag));
-    std::cout << "created" << std::endl;
 
     while(mainRunning) {
         std::unique_ptr<BaseEvent> event;
@@ -57,10 +55,10 @@ int main()
             }
             case EventType::ConnectReq: {
                 auto *eventData = static_cast<ConnectReqEvent*>(event.get());
-                Logger::getInstance().log(LogLevel::Info, "Connection request from: " + eventData->name);
+                Logger::getInstance().log(LogLevel::Info, "Connection request from: " + eventData->name + " (" + eventData->ipAddr + ":" + eventData->port + ")");
 
-                uint32_t clientAddr = eventData->clientAddr;
-                auto event = std::make_unique<ConnectAcceptEvent>(1, clientAddr);
+                uint32_t uniqueId = eventData->uniqueId;
+                auto event = std::make_unique<ConnectAcceptEvent>(1, uniqueId);
 
                 pushNetworkEvent(std::ref(sharedNetResources), std::move(event));
                 break;
@@ -92,7 +90,7 @@ int main()
         }
     }
 
-    std::cout << "Waiting for network thread to finish... " << std::endl;
+    Logger::getInstance().log(LogLevel::Info, "Waiting for network thread to finish... ");
     network_thread.join();
 
     std::cout << "finished" << std::endl;

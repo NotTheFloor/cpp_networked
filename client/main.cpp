@@ -7,6 +7,7 @@
 
 #include "logger.h"
 #include "ntwk.h"
+#include "packets.h"
 
 int main()
 {
@@ -37,10 +38,19 @@ int main()
     packet.placeHolder = 10;
 
     Logger::getInstance().log(LogLevel::Info, "Sending packet");
-    sendPacket(clientSocket, 1, packet);
+    sendPacket(clientSocket, CONN_REQ_PACKET_ID, packet);
     Logger::getInstance().log(LogLevel::Info, "Sent");
 
     std::string buffer;
+    std::cin >> buffer;
+
+    DisconnectClientPacket discPacket;
+    packet.placeHolder = 11;
+
+    Logger::getInstance().log(LogLevel::Info, "Sending disc packet");
+    sendPacket(clientSocket, DISC_CLI_PACKET_ID, discPacket);
+    Logger::getInstance().log(LogLevel::Info, "Sent");
+
     std::cin >> buffer;
 
     close(clientSocket);

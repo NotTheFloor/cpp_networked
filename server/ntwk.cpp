@@ -49,6 +49,7 @@ int setnonblocking(int sock)
     flags |= O_NONBLOCK;
 
     result = fcntl(sock , F_SETFL , flags);
+
     return result;
 }
 
@@ -58,7 +59,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
     Logger::getInstance().log(LogLevel::Debug, "Starting network thread");
 
     // Note: we'll use contain which is C++20
-    std::unordered_map<in_addr_t, int> pendingUserMap, connUserMap;
+    std::unordered_map<int, int> pendingUserMap, connUserMap;
     sharedNetResources.eventfd = eventfd(0, 0);
     int _eventfd = sharedNetResources.eventfd;
 
@@ -113,7 +114,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
             break;
 
         // Blocking function - wakes for network and eventfd fd's
-        nfds = epoll_wait(epollfd, events, MAX_EVENTS, 0);
+        nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
         if (nfds == -1)
         {
             Logger::getInstance().log(LogLevel::Error, "Error epoll_wait");
@@ -133,7 +134,8 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
 
                 Logger::getInstance().log(LogLevel::Info, std::string("Client connected from: ") + inet_ntoa(client_addr.sin_addr));
 
-                setnonblocking(conn_sock);
+                // If anyone in git notices the missing, I'm so sorry
+                //conn_sock = setnonblocking(conn_sock);
                 ev.events = EPOLLIN | EPOLLHUP | EPOLLRDHUP;
                 ev.data.fd = conn_sock;
 
@@ -142,8 +144,6 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                     Logger::getInstance().log(LogLevel::Error, "Failed to add client to epoll");
                     return 1;
                 }
-
-
 
                 // Pending event loop
             } else if (events[n].data.fd == _eventfd) {
@@ -169,14 +169,14 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                         auto *eventData = static_cast<ConnectAcceptEvent*>(event.get());
 
                         // Also need to test if user is already connected
-                        if (!pendingUserMap.contains(client_addr.sin_addr.s_addr)) {
+                        if (!pendingUserMap.contains(eventData->uniqueId)) {
                             Logger::getInstance().log(LogLevel::Warning, "Accepted connection for non-pending user");
                             // Needs to be hadnled
                             break;
                         }
 
-                        pendingUserMap.erase(eventData->clientAddr);
-                        connUserMap[eventData->clientAddr] = eventData->clientId;
+                        pendingUserMap.erase(eventData->uniqueId);
+                        connUserMap[eventData->uniqueId] = eventData->clientId;
                         
                         Logger::getInstance().log(LogLevel::Debug, std::string("Connection request accepted with id: ") + std::to_string(eventData->clientId));
                         break;
@@ -214,17 +214,48 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                     } else {
                         Logger::getInstance().log(LogLevel::Warning, "Client disconnected before being accepted");
                     }
-                } else if(auto *packet = dynamic_cast<ConnReqPacket*>(packetRecvd.get()))
-                {
-                    auto event = std::make_unique<ConnectReqEvent>(client_addr.sin_addr.s_addr, packet->name);
+                } else {
+                    if(auto *packet = dynamic_cast<ConnReqPacket*>(packetRecvd.get()))
+                    {
+                        struct sockaddr_in addr;
+                        socklen_t addr_len = sizeof(addr);
+                        char ip_str[INET_ADDRSTRLEN];
 
-                    pushEvent(std::ref(sharedResources), std::move(event));
+                        if (getpeername(events[n].data.fd, (struct sockaddr*)&addr, &addr_len) == -1) {
+                            Logger::getInstance().log(LogLevel::Error, std::string("Error getting peer name: ") + strerror(errno));
+                            return 1;
+                        }
 
-                    if (pendingUserMap.contains(client_addr.sin_addr.s_addr)) {
-                        pendingUserMap[client_addr.sin_addr.s_addr] += 1;
-                        Logger::getInstance().log(LogLevel::Warning, "Client attempted while still pending");
+                        if (inet_ntop(AF_INET, &(addr.sin_addr), ip_str, INET_ADDRSTRLEN) == nullptr) {
+                            Logger::getInstance().log(LogLevel::Error, std::string("Error getting ip using ntop: ") + strerror(errno));
+                            return 1;
+                        }
+
+                        uint32_t sck = events[n].data.fd;
+                        auto event = std::make_unique<ConnectReqEvent>(sck, packet->name, std::string(ip_str), std::to_string(ntohs(addr.sin_port)));
+
+                        pushEvent(std::ref(sharedResources), std::move(event));
+
+                        if (pendingUserMap.contains(events[n].data.fd)) {
+                            pendingUserMap[events[n].data.fd] += 1;
+                            Logger::getInstance().log(LogLevel::Warning, "Client attempted while still pending");
+                        } else {
+                            pendingUserMap[events[n].data.fd] = 1;
+                        }
+                    } else if(auto *packet = dynamic_cast<DisconnectClientPacket*>(packetRecvd.get())) {
+                        if (connUserMap.contains(events[n].data.fd)) {
+                            close(events[n].data.fd);
+
+                            auto event = std::make_unique<ClientDisconnectEvent>(connUserMap[events[n].data.fd], DisconnectType::Graceful);
+                            // Need to check and handle pending vs connected clients
+
+                            pushEvent(std::ref(sharedResources), std::move(event));
+                        } else {
+                            Logger::getInstance().log(LogLevel::Warning, "Disconnect packet received from not connected client");
+                        }
                     } else {
-                        pendingUserMap[client_addr.sin_addr.s_addr] = 1;
+                        Logger::getInstance().log(LogLevel::Warning, "Unknown packet type received");
+                        // Should probably push packet type here
                     }
                 }
             }
