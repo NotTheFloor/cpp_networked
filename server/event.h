@@ -64,7 +64,7 @@ struct ConnectAcceptEvent : BaseEvent {
     int clientId;
     uint32_t uniqueId;
 
-    ConnectAcceptEvent(int id, uint32_t uid) : clientId(id), uniqueId(id) {
+    ConnectAcceptEvent(int id, uint32_t uid) : clientId(id), uniqueId(uid) {
         eventType = EventType::ConnectAccept;
     }
 };
@@ -74,6 +74,6 @@ struct ClientDisconnectEvent : BaseEvent {
     DisconnectType disconnectType;
 
     ClientDisconnectEvent(int id, DisconnectType dt) : clientId(id), disconnectType(dt) {
-        eventType = EventType::Shutdown;
+        eventType = EventType::ClientDisconnect;
     }
 };

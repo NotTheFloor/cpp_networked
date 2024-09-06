@@ -172,7 +172,9 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                         if (!pendingUserMap.contains(eventData->uniqueId)) {
                             Logger::getInstance().log(LogLevel::Warning, "Accepted connection for non-pending user");
                             // Needs to be hadnled
-                            break;
+                        }
+                        if (connUserMap.contains(eventData->uniqueId)) {
+                            Logger::getInstance().log(LogLevel::Warning, "Accepted client already connected");
                         }
 
                         pendingUserMap.erase(eventData->uniqueId);
