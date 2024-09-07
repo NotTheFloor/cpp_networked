@@ -6,8 +6,8 @@
 #include <string>
 
 #include "logger.h"
-#include "ntwk.h"
-#include "packets.h"
+#include "network/tcp_network.h"
+#include "event.h"
 
 int main()
 {
