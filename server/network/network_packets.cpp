@@ -1,4 +1,4 @@
-#include "network_packets.h"
+#include "network/network_packets.h"
 #include "logger.h"
 
 std::unique_ptr<BasePacket> packetFactory(uint16_t type)

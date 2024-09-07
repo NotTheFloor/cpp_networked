@@ -17,7 +17,7 @@
 #include <errno.h>
 
 #include "logger.h"
-#include "ntwk.h"
+#include "network/tcp_network.h"
 #include "event.h"
 
 #define LISTEN_BACKLOG 5

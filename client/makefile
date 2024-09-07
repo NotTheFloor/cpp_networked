@@ -17,7 +17,7 @@ ASMINCFILES2 = $(wildcard $(INCDIR2)/*.inc)
 CXXFLAGS += -I/usr/include/c++/11 -I/usr/include/x86_64-linux-gnu/c++/11 -I/usr/lib/gcc/x86_64-linux-gnu/11/include
 
 # .cpp files in current directory
-CPPFILES = $(wildcard *.cpp)
+CPPFILES = $(shell find . ../common -name '*.cpp')
 CPPOBJFILES_ = $(CPPFILES:.cpp=.o)
 CPPOBJFILES = $(patsubst %, $(OBJDIR)/%, $(CPPOBJFILES_))
 
@@ -47,11 +47,16 @@ $(TARGET): $(OBJFILES)
 	g++ $(CPPCODE) $(CXXFLAGS) $(OBJFILES) -o $(TARGET)
 
 # Note: full recompiles/assembles on any include file changes
-$(OBJDIR)/%.o: %.cpp $(CPPINCFILES1) $(CPPINCFILES2)
-	g++  $(CXXFLAGS) -I$(INCDIR1) -I$(INCDIR2) $(CPPOPT) $(CPPDEBUG) $(CPPLISTFILE) -c -o $@ $<
+#$(OBJDIR)/%.o: %.cpp $(CPPINCFILES1) $(CPPINCFILES2)
+#	g++  $(CXXFLAGS) -I$(INCDIR1) -I$(INCDIR2) $(CPPOPT) $(CPPDEBUG) $(CPPLISTFILE) -c -o $@ $<
+$(OBJDIR)/%.o: %.cpp
+	mkdir -p $(dir $@)
+	g++  $(CXXFLAGS) -I$(INCDIR1) -I$(INCDIR2) $(CPPOPT) $(CPPDEBUG) $(CPPLISTFILE) -MMD -MP -c -o $@ $<
 
 $(OBJDIR)/%.o: %.s $(ASMINCFILES1) $(ASMINCFILES2)
 	nasm -I$(INCDIR1) -I$(INCDIR2) $(ASMOPT) $(ASMDEBUG) $(ASMLISTFILE) -o $@ $<
+
+-include $(OBJDIR)/*.d
 
 .PHONY: clean
 

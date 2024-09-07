@@ -8,7 +8,7 @@
 
 #include "logger.h"
 #include "event.h"
-#include "ntwk.h"
+#include "network/tcp_network.h"
 
 void pushNetworkEvent(SharedNetResources &sharedNetResources, std::unique_ptr<BaseEvent>(event))
 {
