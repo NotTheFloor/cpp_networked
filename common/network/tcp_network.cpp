@@ -25,6 +25,7 @@
 #define MAX_CONN_ATTEMPTS 3
 
 
+// Should be moved outside of network related code and imported
 void pushEvent(SharedResources &sharedResources, std::unique_ptr<BaseEvent>(event))
 {
     std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
@@ -152,7 +153,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
 
                 std::unique_ptr<BaseEvent> event;
                 {
-                    std::lock_guard lock(sharedNetResources.queueMutex);
+                    std::lock_guard<std::mutex> lock(sharedNetResources.queueMutex);
                     event = std::move(sharedNetResources.eventQueue.front());
                     sharedNetResources.eventQueue.pop();
                 }
@@ -193,7 +194,7 @@ int network_main(SharedResources &sharedResources, SharedNetResources &sharedNet
                 }
 
             } else {
-                std::unique_ptr<BasePacket> packetRecvd = recvPacket(events[n].data.fd, packetFactory);
+                std::unique_ptr<BasePacket> packetRecvd = recvTCPPacket(events[n].data.fd, packetFactory);
 
                 if (packetRecvd == nullptr) 
                 {

@@ -38,7 +38,7 @@ int main()
     packet.placeHolder = 10;
 
     Logger::getInstance().log(LogLevel::Info, "Sending packet");
-    sendPacket(clientSocket, CONN_REQ_PACKET_ID, packet);
+    sendTCPPacket(clientSocket, CONN_REQ_PACKET_ID, packet);
     Logger::getInstance().log(LogLevel::Info, "Sent");
 
     std::string buffer;
@@ -48,7 +48,7 @@ int main()
     packet.placeHolder = 11;
 
     Logger::getInstance().log(LogLevel::Info, "Sending disc packet");
-    sendPacket(clientSocket, DISC_CLI_PACKET_ID, discPacket);
+    sendTCPPacket(clientSocket, DISC_CLI_PACKET_ID, discPacket);
     Logger::getInstance().log(LogLevel::Info, "Sent");
 
     std::cin >> buffer;
