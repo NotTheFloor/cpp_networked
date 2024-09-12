@@ -1,5 +1,6 @@
 #include "network/network_packets.h"
 #include "logger.h"
+#include "network/packets.h"
 #include <cstdint>
 
 uint16_t calcChecksum(const std::vector<uint8_t> &payload) {
@@ -107,3 +108,47 @@ std::unique_ptr<BasePacket> recvTCPPacket(int sock, std::function<std::unique_pt
 
     return basePacket;
 }
+
+
+std::unique_ptr<BasePacket> recvUDPPacket(int sock, std::function<std::unique_ptr<BasePacket>(uint16_t)> packetFactory, sockaddr_in &remoteAddr) {
+    UdpPcktHeader header;
+    socklen_t addr_len = sizeof(remoteAddr);
+
+    uint8_t buffer[UDP_RECV_PKT_SIZE];
+
+    ssize_t bytesReceived = recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr*)&remoteAddr, &addr_len);
+    if (bytesReceived < sizeof(UdpPcktHeader)) {
+        // Need to handle
+        Logger::getInstance().log(LogLevel::Error, "Received less than header");
+        return nullptr;
+    }
+
+    std::memcpy(&header, buffer, sizeof(header));
+    uint16_t type = ntohs(header.type);
+    uint16_t length = ntohs(header.length);
+    uint16_t sequence = ntohs(header.sequence);
+    uint16_t checksum = ntohs(header.checksum);
+
+    if (bytesReceived < sizeof(header) + length) {
+        Logger::getInstance().log(LogLevel::Error, "Receieved less than header spec'd length");
+        return nullptr;
+    }
+
+    std::vector<uint8_t> payload(length);
+    std::memcpy(payload.data(), buffer + sizeof(header), length);
+
+    uint16_t recvChecksum = calcChecksum(payload);
+    if (checksum != recvChecksum) {
+        Logger::getInstance().log(LogLevel::Error, "Check sums do not match");
+        return nullptr;
+    }
+    
+    std::unique_ptr<BasePacket> basePacket = packetFactory(type);
+
+    if (basePacket)
+        basePacket->deserialize(payload);
+
+    return basePacket;
+}
+
+
