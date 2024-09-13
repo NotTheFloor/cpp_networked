@@ -7,8 +7,13 @@
 #include <cstdint>
 
 #include "network/packets.h"
+#include "event.h"
 
 #define UDP_RECV_PKT_SIZE 2048
+
+struct SharedNetResources : SharedResources {
+   int eventfd;
+};
 
 struct TcpPcktHeader {
     uint16_t type;
@@ -24,6 +29,8 @@ struct UdpPcktHeader {
 };
 
 
+int setnonblocking(int sock);
+void pushEvent(SharedResources &sharedResources, std::unique_ptr<BaseEvent>(event));
 uint16_t calcChecksum(const std::vector<uint8_t> &payload);
 std::unique_ptr<BasePacket> packetFactory(uint16_t type);
 void sendTCPPacket(int sock, uint16_t type, const BasePacket & basePacket);

@@ -3,6 +3,15 @@
 #include "network/packets.h"
 #include <cstdint>
 
+// Should be moved outside of network related code and imported
+void pushEvent(SharedResources &sharedResources, std::unique_ptr<BaseEvent>(event))
+{
+    std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
+    sharedResources.eventQueue.push(std::move(event));
+
+    sharedResources.eventCondition.notify_one();
+}
+
 uint16_t calcChecksum(const std::vector<uint8_t> &payload) {
     uint32_t sum = 0;
 

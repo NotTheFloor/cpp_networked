@@ -1,0 +1,9 @@
+x64lin/../common/network/udp_network.o: ../common/network/udp_network.cpp \
+ ../common/logger.h ../common/network/tcp_network.h \
+ ../common/network/network_packets.h ../common/network/packets.h \
+ ../common/event.h
+../common/logger.h:
+../common/network/tcp_network.h:
+../common/network/network_packets.h:
+../common/network/packets.h:
+../common/event.h:

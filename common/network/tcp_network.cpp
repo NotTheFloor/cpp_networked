@@ -25,37 +25,8 @@
 #define MAX_CONN_ATTEMPTS 3
 
 
-// Should be moved outside of network related code and imported
-void pushEvent(SharedResources &sharedResources, std::unique_ptr<BaseEvent>(event))
-{
-    std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
-    sharedResources.eventQueue.push(std::move(event));
-
-    sharedResources.eventCondition.notify_one();
-}
-
-// Provided by selbie on stackoverflow
-int setnonblocking(int sock)
-{
-    int result;
-    int flags;
-
-    flags = ::fcntl(sock, F_GETFL, 0);
-
-    if (flags == -1)
-    {
-        return -1;  // error
-    }
-
-    flags |= O_NONBLOCK;
-
-    result = fcntl(sock , F_SETFL , flags);
-
-    return result;
-}
-
 // We start swapping to camelCase here... fine
-int network_main(SharedResources &sharedResources, SharedNetResources &sharedNetResources, std::atomic<bool> &shutdownFlag)
+int tcp_network_main(SharedResources &sharedResources, SharedNetResources &sharedNetResources, std::atomic<bool> &shutdownFlag)
 {
     Logger::getInstance().log(LogLevel::Debug, "Starting network thread");
 
