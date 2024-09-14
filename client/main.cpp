@@ -6,12 +6,12 @@
 #include <string>
 
 #include "logger.h"
-#include "network/tcp_network.h"
+#include "network/udp_network.h"
 #include "event.h"
 
 int main()
 {
-    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    int clientSocket = socket(AF_INET, SOCK_DGRAM, 0);
 
     sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
@@ -25,11 +25,12 @@ int main()
 
     Logger::getInstance().log(LogLevel::Info, "Attempting to connect... ");
 
+    /*
     if (connect(clientSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) == -1)
     {
         Logger::getInstance().log(LogLevel::Error, "Failed to connect to server");
         return 1;
-    }
+    }*/
 
     Logger::getInstance().log(LogLevel::Info, "Connected");
 
@@ -38,7 +39,7 @@ int main()
     packet.placeHolder = 10;
 
     Logger::getInstance().log(LogLevel::Info, "Sending packet");
-    sendTCPPacket(clientSocket, CONN_REQ_PACKET_ID, packet);
+    sendUDPPacket(clientSocket, serverAddress, CONN_REQ_PACKET_ID, packet);
     Logger::getInstance().log(LogLevel::Info, "Sent");
 
     std::string buffer;
@@ -48,7 +49,7 @@ int main()
     packet.placeHolder = 11;
 
     Logger::getInstance().log(LogLevel::Info, "Sending disc packet");
-    sendTCPPacket(clientSocket, DISC_CLI_PACKET_ID, discPacket);
+    sendUDPPacket(clientSocket, serverAddress, DISC_CLI_PACKET_ID, discPacket);
     Logger::getInstance().log(LogLevel::Info, "Sent");
 
     std::cin >> buffer;

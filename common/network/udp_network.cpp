@@ -28,33 +28,35 @@
 // We start swapping to camelCase here... fine
 int udp_network_main(SharedResources &sharedResources, SharedNetResources &sharedNetResources, std::atomic<bool> &shutdownFlag)
 {
+    int nextClientId = 0;
     Logger::getInstance().log(LogLevel::Debug, "Starting network thread");
 
-    // Note: we'll use contain which is C++20
-    std::unordered_map<int, int> pendingUserMap, connUserMap;
+    // Note: we'll use contain which is C++21
+    // We should either use boost or containerize this in a wrapper class
+    std::unordered_map<uint32_t, int> pendingUserMapByAddrIp, connUserMapByAddrIp;
+    std::unordered_map<int, sockaddr_in> pendingUserMapById, connUserMapById;
     sharedNetResources.eventfd = eventfd(0, 0);
     int _eventfd = sharedNetResources.eventfd;
 
     struct epoll_event ev, events[MAX_EVENTS];
-    int conn_sock, nfds, epollfd;
+    int nfds, epollfd;
 
-    int list_sock = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+    int serverSocket = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
 
     sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(8080);
     serverAddress.sin_addr.s_addr = INADDR_ANY;
 
+    // I think we need to move this into the loop scope
     sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
 
-    if (bind(list_sock, reinterpret_cast<struct sockaddr *>(&serverAddress), sizeof(serverAddress)) == -1)
+    if (bind(serverSocket, reinterpret_cast<struct sockaddr *>(&serverAddress), sizeof(serverAddress)) == -1)
     {
         Logger::getInstance().log(LogLevel::Error, "Error binding server socket");
         return 1;
     }
-
-    listen(list_sock, LISTEN_BACKLOG);
 
     epollfd = epoll_create1(0); // Essentially same as create
     if (epollfd == -1)
@@ -64,8 +66,8 @@ int udp_network_main(SharedResources &sharedResources, SharedNetResources &share
     }
 
     ev.events = EPOLLIN;
-    ev.data.fd = list_sock;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, list_sock, &ev) == -1)
+    ev.data.fd = serverSocket;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, serverSocket, &ev) == -1)
     {
         Logger::getInstance().log(LogLevel::Error, "Error epoll_ctl");
         return 1;
@@ -95,7 +97,7 @@ int udp_network_main(SharedResources &sharedResources, SharedNetResources &share
 
         for(int n = 0; n < nfds; ++n)
         {
-            // Listening socket active, likely connection attempt
+            /* // Listening socket active, likely connection attempt
             if (events[n].data.fd == list_sock)
             {
                 conn_sock = accept(list_sock, (struct sockaddr*) &client_addr, &client_addr_len);
@@ -118,7 +120,8 @@ int udp_network_main(SharedResources &sharedResources, SharedNetResources &share
                 }
 
                 // Pending event loop
-            } else if (events[n].data.fd == _eventfd) {
+            } else */
+            if (events[n].data.fd == _eventfd) {
                 uint64_t u;
                 read(_eventfd, &u, sizeof(uint64_t));
 
@@ -141,16 +144,18 @@ int udp_network_main(SharedResources &sharedResources, SharedNetResources &share
                         auto *eventData = static_cast<ConnectAcceptEvent*>(event.get());
 
                         // Also need to test if user is already connected
-                        if (!pendingUserMap.contains(eventData->uniqueId)) {
+                        if (!pendingUserMapById.contains(eventData->uniqueId)) {
                             Logger::getInstance().log(LogLevel::Warning, "Accepted connection for non-pending user");
                             // Needs to be hadnled
                         }
-                        if (connUserMap.contains(eventData->uniqueId)) {
+                        if (connUserMapById.contains(eventData->clientId)) {
                             Logger::getInstance().log(LogLevel::Warning, "Accepted client already connected");
                         }
 
-                        pendingUserMap.erase(eventData->uniqueId);
-                        connUserMap[eventData->uniqueId] = eventData->clientId;
+                        connUserMapById[eventData->clientId] = pendingUserMapById[eventData->uniqueId];
+                        connUserMapByAddrIp[pendingUserMapById[eventData->uniqueId].sin_addr.s_addr] = eventData->clientId;
+                        pendingUserMapByAddrIp.erase(pendingUserMapById[eventData->uniqueId].sin_addr.s_addr);
+                        pendingUserMapById.erase(eventData->uniqueId);
                         
                         Logger::getInstance().log(LogLevel::Debug, std::string("Connection request accepted with id: ") + std::to_string(eventData->clientId));
                         break;
@@ -165,11 +170,12 @@ int udp_network_main(SharedResources &sharedResources, SharedNetResources &share
                 }
 
             } else {
-                std::unique_ptr<BasePacket> packetRecvd = recvTCPPacket(events[n].data.fd, packetFactory);
+                sockaddr_in remoteAddr;
+                std::unique_ptr<BasePacket> packetRecvd = recvUDPPacket(events[n].data.fd, packetFactory, remoteAddr);
 
                 if (packetRecvd == nullptr) 
                 {
-                    int s2c = events[n].data.fd;
+                    /*int s2c = events[n].data.fd;
 
                     Logger::getInstance().log(LogLevel::Info, "Client socket closing");
 
@@ -179,48 +185,61 @@ int udp_network_main(SharedResources &sharedResources, SharedNetResources &share
                         return 1;
                     }
 
-                    close(s2c);
+                    close(s2c);*/
 
-                    if (connUserMap.contains(s2c)) {
-                        auto event = std::make_unique<ClientDisconnectEvent>(connUserMap[s2c], DisconnectType::Ungraceful);
+                    // What does remoteAddr equal here?
+                    // NULLPTR means error, disconnect the client
+                    if (connUserMapByAddrIp.contains(remoteAddr.sin_addr.s_addr)) {
+                        auto event = std::make_unique<ClientDisconnectEvent>(connUserMapByAddrIp[remoteAddr.sin_addr.s_addr], DisconnectType::Ungraceful);
+
+                        connUserMapById.erase(connUserMapByAddrIp[remoteAddr.sin_addr.s_addr]);
+                        connUserMapByAddrIp.erase(remoteAddr.sin_addr.s_addr);
+                        // We should also look at pending here. A problem would be if pending keeps getting bigger...
 
                         pushEvent(std::ref(sharedResources), std::move(event));
                     } else {
                         Logger::getInstance().log(LogLevel::Warning, "Client disconnected before being accepted");
                     }
                 } else {
+                    // We need to differentiate and check what packets can be handled based on connections state
                     if(auto *packet = dynamic_cast<ConnReqPacket*>(packetRecvd.get()))
                     {
-                        struct sockaddr_in addr;
-                        socklen_t addr_len = sizeof(addr);
+                        //struct sockaddr_in addr;
+                        //socklen_t addr_len = sizeof(addr);
                         char ip_str[INET_ADDRSTRLEN];
 
-                        if (getpeername(events[n].data.fd, (struct sockaddr*)&addr, &addr_len) == -1) {
+                        /*if (getpeername(events[n].data.fd, (struct sockaddr*)&addr, &addr_len) == -1) {
                             Logger::getInstance().log(LogLevel::Error, std::string("Error getting peer name: ") + strerror(errno));
                             return 1;
-                        }
+                        }*/
 
-                        if (inet_ntop(AF_INET, &(addr.sin_addr), ip_str, INET_ADDRSTRLEN) == nullptr) {
+                        if (inet_ntop(AF_INET, &(remoteAddr.sin_addr), ip_str, INET_ADDRSTRLEN) == nullptr) {
                             Logger::getInstance().log(LogLevel::Error, std::string("Error getting ip using ntop: ") + strerror(errno));
                             return 1;
                         }
 
-                        uint32_t sck = events[n].data.fd;
-                        auto event = std::make_unique<ConnectReqEvent>(sck, packet->name, std::string(ip_str), std::to_string(ntohs(addr.sin_port)));
+                        //uint32_t sck = events[n].data.fd;
+                        nextClientId += 1;
+                        auto event = std::make_unique<ConnectReqEvent>(nextClientId, packet->name, std::string(ip_str), std::to_string(ntohs(remoteAddr.sin_port)));
 
                         pushEvent(std::ref(sharedResources), std::move(event));
 
-                        if (pendingUserMap.contains(events[n].data.fd)) {
-                            pendingUserMap[events[n].data.fd] += 1;
+                        if (pendingUserMapByAddrIp.contains(remoteAddr.sin_addr.s_addr)) {
+                            //pendingUserMap[events[n].data.fd] += 1;
+                            // We need to detect ddos here?
                             Logger::getInstance().log(LogLevel::Warning, "Client attempted while still pending");
                         } else {
-                            pendingUserMap[events[n].data.fd] = 1;
+                            pendingUserMapByAddrIp[remoteAddr.sin_addr.s_addr] = nextClientId;
+                            pendingUserMapById[nextClientId] = remoteAddr;
                         }
                     } else if(auto *packet = dynamic_cast<DisconnectClientPacket*>(packetRecvd.get())) {
-                        if (connUserMap.contains(events[n].data.fd)) {
-                            close(events[n].data.fd);
+                        if (connUserMapByAddrIp.contains(remoteAddr.sin_addr.s_addr)) {
+                            // Need to test for pending here as well and handle appropraitely
 
-                            auto event = std::make_unique<ClientDisconnectEvent>(connUserMap[events[n].data.fd], DisconnectType::Graceful);
+                            auto event = std::make_unique<ClientDisconnectEvent>(connUserMapByAddrIp[remoteAddr.sin_addr.s_addr], DisconnectType::Graceful);
+                        
+                            connUserMapById.erase(connUserMapByAddrIp[remoteAddr.sin_addr.s_addr]);
+                            connUserMapByAddrIp.erase(remoteAddr.sin_addr.s_addr);
                             // Need to check and handle pending vs connected clients
 
                             pushEvent(std::ref(sharedResources), std::move(event));
@@ -236,7 +255,7 @@ int udp_network_main(SharedResources &sharedResources, SharedNetResources &share
         }
     }
 
-    close(list_sock);
+    close(serverSocket);
 
     Logger::getInstance().log(LogLevel::Debug, "Shutting down network loop");
 

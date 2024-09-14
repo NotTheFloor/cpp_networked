@@ -2,6 +2,27 @@
 #include "logger.h"
 #include "network/packets.h"
 #include <cstdint>
+#include <fcntl.h>
+
+// Provided by selbie on stackoverflow
+int setnonblocking(int sock)
+{
+    int result;
+    int flags;
+
+    flags = ::fcntl(sock, F_GETFL, 0);
+
+    if (flags == -1)
+    {
+        return -1;  // error
+    }
+
+    flags |= O_NONBLOCK;
+
+    result = fcntl(sock , F_SETFL , flags);
+
+    return result;
+}
 
 // Should be moved outside of network related code and imported
 void pushEvent(SharedResources &sharedResources, std::unique_ptr<BaseEvent>(event))
@@ -53,7 +74,7 @@ std::unique_ptr<BasePacket> packetFactory(uint16_t type)
     }
 }
 
-void sendUDPPacket(int sock, const sockaddr_in &destAddr, uint16_t type, const BasePacket &basePacket, uint16_t sequence = 0)
+void sendUDPPacket(int sock, const sockaddr_in &destAddr, uint16_t type, const BasePacket &basePacket, uint16_t sequence)
 {
     std::vector<uint8_t> payload = basePacket.serialize();
     uint16_t payload_length = static_cast<uint16_t>(payload.size());

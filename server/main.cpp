@@ -8,7 +8,7 @@
 
 #include "logger.h"
 #include "event.h"
-#include "network/tcp_network.h"
+#include "network/udp_network.h"
 
 void pushNetworkEvent(SharedNetResources &sharedNetResources, std::unique_ptr<BaseEvent>(event))
 {
@@ -28,7 +28,7 @@ int main()
 
     // Create network thread
     Logger::getInstance().log(LogLevel::Info, "Creating network thread ...");
-    std::thread network_thread(tcp_network_main, std::ref(sharedResources), std::ref(sharedNetResources), std::ref(networkShutdownFlag));
+    std::thread network_thread(udp_network_main, std::ref(sharedResources), std::ref(sharedNetResources), std::ref(networkShutdownFlag));
 
     while(mainRunning) {
         std::unique_ptr<BaseEvent> event;
