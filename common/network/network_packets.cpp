@@ -3,6 +3,7 @@
 #include "network/packets.h"
 #include <cstdint>
 #include <fcntl.h>
+#include <sys/socket.h>
 
 // Provided by selbie on stackoverflow
 int setnonblocking(int sock)
@@ -24,13 +25,13 @@ int setnonblocking(int sock)
     return result;
 }
 
-// Should be moved outside of network related code and imported
-void pushEvent(SharedResources &sharedResources, std::unique_ptr<BaseEvent>(event))
+void pushNetworkEvent(SharedNetResources &sharedNetResources, std::unique_ptr<BaseEvent>(event))
 {
-    std::lock_guard<std::mutex> lock(sharedResources.queueMutex);
-    sharedResources.eventQueue.push(std::move(event));
+    std::lock_guard<std::mutex> lock(sharedNetResources.queueMutex);
+    sharedNetResources.eventQueue.push(std::move(event));
 
-    sharedResources.eventCondition.notify_one();
+    uint64_t u = 1;
+    write(sharedNetResources.eventfd, &u, sizeof(uint64_t));
 }
 
 uint16_t calcChecksum(const std::vector<uint8_t> &payload) {

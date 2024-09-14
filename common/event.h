@@ -6,12 +6,14 @@
 #include <mutex>
 #include <condition_variable>
 
+
 enum class EventType {
     EventTypeMessage,
     Shutdown,
     ConnectReq,
     ConnectAccept,
-    ClientDisconnect
+    ClientDisconnect,
+    TimerFired
 };
 
 enum class DisconnectType {
@@ -30,6 +32,14 @@ struct SharedResources {
     std::queue<std::unique_ptr<BaseEvent>> eventQueue;
     std::mutex queueMutex;
     std::condition_variable eventCondition;
+};
+
+struct TimerFiredEvent : BaseEvent {
+    std::string timerName;
+
+    TimerFiredEvent(std::string tn) : timerName(tn) {
+        eventType = EventType::TimerFired;
+    }
 };
 
 struct MessageEvent : BaseEvent {
@@ -77,3 +87,6 @@ struct ClientDisconnectEvent : BaseEvent {
         eventType = EventType::ClientDisconnect;
     }
 };
+
+void pushEvent(SharedResources &sharedResources, std::unique_ptr<BaseEvent>(event));
+

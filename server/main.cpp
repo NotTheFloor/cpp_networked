@@ -4,20 +4,12 @@
 #include <memory>
 #include <mutex>
 #include <atomic>
-#include <sys/socket.h>
+#include <unordered_map>
 
 #include "logger.h"
 #include "event.h"
 #include "network/udp_network.h"
-
-void pushNetworkEvent(SharedNetResources &sharedNetResources, std::unique_ptr<BaseEvent>(event))
-{
-    std::lock_guard<std::mutex> lock(sharedNetResources.queueMutex);
-    sharedNetResources.eventQueue.push(std::move(event));
-
-    uint64_t u = 1;
-    write(sharedNetResources.eventfd, &u, sizeof(uint64_t));
-}
+#include "timer_thread.h"
 
 int main()
 {
@@ -25,6 +17,13 @@ int main()
     SharedResources sharedResources;
     SharedNetResources sharedNetResources;
     std::atomic<bool> networkShutdownFlag(false);
+
+    // I would never condone this normally, but this is still a proof og concept
+    // and as such we're doing this rather horendous thread management
+    std::unordered_map<std::string, std::atomic<bool>> timerThreads;
+    timerThreads.emplace("test", false);
+    std::thread fireOnceTest(repeatTimerThread, std::string("Test Timer Fired!"), 3000, std::ref(sharedResources), std::ref(timerThreads["test"]));
+    fireOnceTest.detach();
 
     // Create network thread
     Logger::getInstance().log(LogLevel::Info, "Creating network thread ...");
@@ -40,6 +39,13 @@ int main()
         }
 
         switch(event->eventType) {
+            case EventType::TimerFired: 
+            {
+                auto *eventData = static_cast<TimerFiredEvent*>(event.get());
+
+                std::cout << eventData->timerName << std::endl;
+                break;
+            }
             case EventType::EventTypeMessage: {
                 auto *eventData = static_cast<MessageEvent*>(event.get());
                 std::cout << "Event loop data: " << eventData->message << std::endl;

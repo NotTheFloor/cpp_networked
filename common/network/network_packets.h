@@ -28,9 +28,9 @@ struct UdpPcktHeader {
     //uint16_t flags;
 };
 
+void pushNetworkEvent(SharedNetResources &sharedNetResources, std::unique_ptr<BaseEvent>(event));
 
 int setnonblocking(int sock);
-void pushEvent(SharedResources &sharedResources, std::unique_ptr<BaseEvent>(event));
 uint16_t calcChecksum(const std::vector<uint8_t> &payload);
 std::unique_ptr<BasePacket> packetFactory(uint16_t type);
 void sendTCPPacket(int sock, uint16_t type, const BasePacket & basePacket);
